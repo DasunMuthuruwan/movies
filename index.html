@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Film & TV Explorer - Search Movies & TV Series</title>
+  <meta name="description" content="Search and explore movies and TV series with IMDb ratings, actors, and directors." />
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <style>
+    body { 
+      background-color: #0f172a;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+    .fade-enter-active, .fade-leave-active {
+      transition: opacity 0.3s ease;
+    }
+    .fade-enter-from, .fade-leave-to {
+      opacity: 0;
+    }
+    .scrollbar-hide::-webkit-scrollbar {
+      display: none;
+    }
+    .scrollbar-hide {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    .skeleton {
+      background-color: #1e293b;
+      background-image: linear-gradient(90deg, #1e293b, #334155, #1e293b);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+    }
+    @keyframes shimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+    .movie-card {
+      transition: all 0.3s ease;
+    }
+    .movie-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+    }
+    .comment-box {
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .search-input {
+      transition: all 0.3s ease;
+    }
+    .search-input:focus {
+      box-shadow: 0 0 0 2px rgba(236, 72, 153, 0.5);
+    }
+  </style>
+</head>
+<body class="text-gray-100">
+  <div id="app" class="flex-1 flex flex-col">
+    <!-- Enhanced Header with Logo -->
+    <header class="bg-slate-900 px-4 py-4 shadow-lg sticky top-0 z-40">
+      <div class="container mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <div class="flex items-center justify-center bg-pink-500 w-10 h-10 rounded-full">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
+            </svg>
+          </div>
+          <div>
+            <h1 class="text-xl font-bold">Film & TV Explorer</h1>
+            <p class="text-xs text-gray-400">Discover your next favorite movie or show</p>
+          </div>
+        </div>
+        
+        <!-- Real-time Search -->
+        <div class="relative w-full md:w-96">
+          <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          <input
+            v-model="searchQuery"
+            @input="handleSearchInput"
+            placeholder="Search movies or TV series..."
+            class="search-input w-full pl-10 pr-4 py-2 rounded-lg bg-slate-800 focus:outline-none focus:ring-2 focus:ring-pink-500"
+            aria-label="Search movies or TV series"
+          />
+          <div v-if="searchQuery" @click="clearSearch" class="absolute inset-y-0 right-0 pr-3 flex items-center cursor-pointer">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400 hover:text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main content -->
+    <main class="flex-1 container mx-auto p-4">
+      <!-- Filters -->
+      <div class="flex flex-wrap gap-3 mb-6 items-center">
+        <div class="flex items-center gap-2">
+          <label for="type-filter" class="text-sm text-gray-300">Type:</label>
+          <select 
+            v-model="typeFilter"
+            @change="searchMovies"
+            id="type-filter"
+            class="bg-slate-800 text-sm rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-pink-500"
+          >
+            <option value="">All</option>
+            <option value="movie">Movies</option>
+            <option value="series">TV Series</option>
+            <option value="episode">Episodes</option>
+          </select>
+        </div>
+        
+        <div class="flex items-center gap-2">
+          <label for="year-filter" class="text-sm text-gray-300">Year:</label>
+          <select 
+            v-model="yearFilter"
+            @change="searchMovies"
+            id="year-filter"
+            class="bg-slate-800 text-sm rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-pink-500"
+          >
+            <option value="">All Years</option>
+            <option v-for="year in years" :value="year">{{ year }}</option>
+          </select>
+        </div>
+        
+        <button 
+          @click="toggleWatchlist"
+          class="ml-auto flex items-center gap-1 bg-indigo-600 hover:bg-indigo-700 px-3 py-1 rounded text-sm transition"
+        >
+          <i class="fas fa-bookmark"></i>
+          {{ showWatchlist ? 'Show Search Results' : 'View Watchlist' }}
+        </button>
+      </div>
+
+      <!-- Empty state -->
+      <div v-if="!loading && movies.length === 0 && !showWatchlist" class="text-center py-12">
+        <div class="max-w-md mx-auto">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-gray-500 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <h3 class="text-lg font-medium mb-2">No results found</h3>
+          <p class="text-gray-400 mb-4">Try searching for movies or TV series using the search bar above.</p>
+          <button 
+            @click="loadPopular"
+            class="bg-pink-500 hover:bg-pink-600 px-4 py-2 rounded transition"
+          >
+            Load Popular Titles
+          </button>
+        </div>
+      </div>
+
+      <!-- Watchlist empty state -->
+      <div v-if="!loading && showWatchlist && watchlist.length === 0" class="text-center py-12">
+        <div class="max-w-md mx-auto">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-gray-500 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+          </svg>
+          <h3 class="text-lg font-medium mb-2">Your watchlist is empty</h3>
+          <p class="text-gray-400 mb-4">Add movies and TV shows to your watchlist by clicking the bookmark icon.</p>
+          <button 
+            @click="toggleWatchlist"
+            class="bg-pink-500 hover:bg-pink-600 px-4 py-2 rounded transition"
+          >
+            Back to Search
+          </button>
+        </div>
+      </div>
+
+      <!-- Skeleton loading -->
+      <div v-if="loading" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+        <div v-for="i in 10" :key="i" class="bg-slate-800 rounded overflow-hidden">
+          <div class="skeleton w-full h-72"></div>
+          <div class="p-3">
+            <div class="skeleton h-4 w-3/4 mb-2"></div>
+            <div class="skeleton h-3 w-1/2"></div>
+            <div class="skeleton h-3 w-1/4 mt-3"></div>
+            <div class="skeleton h-6 w-full mt-3 rounded"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Movie grid -->
+      <div v-if="!loading" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+        <div
+          v-for="movie in displayItems"
+          :key="movie.imdbID"
+          class="movie-card bg-slate-800 rounded-lg overflow-hidden hover:shadow-xl transition duration-300 cursor-pointer relative"
+        >
+          <div class="absolute top-2 right-2 z-10">
+            <button 
+              @click.stop="toggleWatchlistItem(movie)"
+              class="bg-slate-900 bg-opacity-70 rounded-full p-2 hover:bg-pink-500 transition"
+              :class="{ 'text-pink-500': isInWatchlist(movie.imdbID), 'text-gray-400': !isInWatchlist(movie.imdbID) }"
+            >
+              <i class="fas" :class="isInWatchlist(movie.imdbID) ? 'fa-bookmark' : 'fa-bookmark'"></i>
+            </button>
+          </div>
+          
+          <img
+            :src="movie.Poster !== 'N/A' ? movie.Poster : 'https://via.placeholder.com/300x445?text=No+Image'"
+            :alt="movie.Title"
+            class="w-full h-72 object-cover"
+            @error="handleImageError"
+          />
+          <div class="p-3 flex flex-col">
+            <h3 class="text-sm font-semibold mb-1 truncate">{{ movie.Title }}</h3>
+            <div class="flex justify-between items-center text-xs text-gray-400 mb-2">
+              <span>{{ movie.Year }}</span>
+              <span class="capitalize">{{ movie.Type }}</span>
+            </div>
+            <div class="flex items-center text-yellow-400 text-xs">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.286 3.967a1 1 0 00.95.69h4.174c.969 0 1.371 1.24.588 1.81l-3.38 2.455a1 1 0 00-.364 1.118l1.287 3.966c.3.922-.755 1.688-1.54 1.118l-3.381-2.455a1 1 0 00-1.175 0l-3.381 2.455c-.784.57-1.838-.196-1.539-1.118l1.286-3.966a1 1 0 00-.364-1.118L2.05 9.394c-.783-.57-.38-1.81.588-1.81h4.174a1 1 0 00.95-.69l1.287-3.967z"/>
+              </svg>
+              {{ movie.imdbRating !== 'N/A' ? movie.imdbRating : '—' }}/10
+            </div>
+            <button
+              @click.stop="openModal(movie.imdbID)"
+              class="mt-3 bg-pink-500 hover:bg-pink-600 text-xs py-1.5 rounded transition w-full"
+              aria-label="View Details"
+            >
+              View Details
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pagination -->
+      <div v-if="!loading && !showWatchlist && totalResults > 10" class="flex justify-center mt-8">
+        <div class="flex items-center gap-2">
+          <button
+            @click="prevPage"
+            :disabled="currentPage === 1"
+            class="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+          >
+            <i class="fas fa-chevron-left"></i>
+          </button>
+          <span class="text-sm text-gray-300">
+            Page {{ currentPage }} of {{ totalPages }}
+          </span>
+          <button
+            @click="nextPage"
+            :disabled="currentPage === totalPages || totalPages === 0"
+            class="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+          >
+            <i class="fas fa-chevron-right"></i>
+          </button>
+        </div>
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-slate-900 text-gray-400 py-6 mt-8">
+      <div class="container mx-auto px-4">
+        <div class="flex flex-col md:flex-row justify-between items-center">
+          <div class="flex items-center gap-2 mb-4 md:mb-0">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-pink-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
+            </svg>
+            <span class="font-medium">Film & TV Explorer</span>
+          </div>
+          
+          <div class="flex gap-4 mb-4 md:mb-0">
+            <a href="#" class="hover:text-pink-500 transition">About</a>
+            <a href="#" class="hover:text-pink-500 transition">Privacy</a>
+            <a href="#" class="hover:text-pink-500 transition">Terms</a>
+            <a href="#" class="hover:text-pink-500 transition">Contact</a>
+          </div>
+          
+          <div class="flex gap-4">
+            <a href="#" class="hover:text-pink-500 transition text-xl"><i class="fab fa-facebook"></i></a>
+            <a href="#" class="hover:text-pink-500 transition text-xl"><i class="fab fa-twitter"></i></a>
+            <a href="#" class="hover:text-pink-500 transition text-xl"><i class="fab fa-instagram"></i></a>
+            <a href="#" class="hover:text-pink-500 transition text-xl"><i class="fab fa-github"></i></a>
+          </div>
+        </div>
+        
+        <div class="text-center mt-6 text-sm">
+          <p>© 2023 Film & TV Explorer. All rights reserved.</p>
+          <p class="mt-1">Data provided by OMDB API</p>
+        </div>
+      </div>
+    </footer>
+
+    <!-- Loading overlay -->
+    <transition name="fade">
+      <div v-if="loading" class="fixed inset-0 bg-black bg-opacity-80 flex flex-col items-center justify-center z-50">
+        <svg xmlns="http://www.w3.org/2000/svg" class="animate-spin h-10 w-10 text-pink-500 mb-2" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+        </svg>
+        <p>Loading...</p>
+      </div>
+    </transition>
+
+    <!-- Modal -->
+    <transition name="fade">
+      <div
+        v-if="selectedMovie"
+        class="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4"
+        @click.self="closeModal"
+      >
+        <div class="bg-slate-900 max-w-2xl w-full p-6 rounded-lg relative max-h-[90vh] overflow-y-auto scrollbar-hide">
+          <button
+            @click="closeModal"
+            class="absolute top-4 right-4 text-gray-400 hover:text-white transition text-2xl"
+            aria-label="Close Modal"
+          >
+            &times;
+          </button>
+          
+          <div class="flex flex-col md:flex-row gap-6">
+            <div class="flex-shrink-0">
+              <img
+                v-if="selectedMovie.Poster && selectedMovie.Poster !== 'N/A'"
+                :src="selectedMovie.Poster"
+                :alt="selectedMovie.Title"
+                class="w-full max-w-xs rounded-lg shadow-lg"
+                @error="handleImageError"
+              />
+            </div>
+            
+            <div class="flex-1">
+              <div class="flex items-start justify-between">
+                <div>
+                  <h2 class="text-2xl font-bold mb-1">{{ selectedMovie.Title }} ({{ selectedMovie.Year }})</h2>
+                  <div class="flex items-center gap-3 text-sm text-gray-400 mb-4">
+                    <span>{{ selectedMovie.Runtime || 'N/A' }}</span>
+                    <span>•</span>
+                    <span class="capitalize">{{ selectedMovie.Type }}</span>
+                    <span>•</span>
+                    <span>{{ selectedMovie.Rated || 'N/A' }}</span>
+                  </div>
+                </div>
+                
+                <button 
+                  @click="toggleWatchlistItem(selectedMovie)"
+                  class="text-2xl"
+                  :class="{ 'text-pink-500': isInWatchlist(selectedMovie.imdbID), 'text-gray-400': !isInWatchlist(selectedMovie.imdbID) }"
+                >
+                  <i class="fas" :class="isInWatchlist(selectedMovie.imdbID) ? 'fa-bookmark' : 'fa-bookmark'"></i>
+                </button>
+              </div>
+              
+              <div class="flex items-center mb-4">
+                <div class="flex items-center text-yellow-400 mr-4">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.286 3.967a1 1 0 00.95.69h4.174c.969 0 1.371 1.24.588 1.81l-3.38 2.455a1 1 0 00-.364 1.118l1.287 3.966c.3.922-.755 1.688-1.54 1.118l-3.381-2.455a1 1 0 00-1.175 0l-3.381 2.455c-.784.57-1.838-.196-1.539-1.118l1.286-3.966a1 1 0 00-.364-1.118L2.05 9.394c-.783-.57-.38-1.81.588-1.81h4.174a1 1 0 00.95-.69l1.287-3.967z"/>
+                  </svg>
+                  <span class="font-semibold">{{ selectedMovie.imdbRating !== 'N/A' ? selectedMovie.imdbRating : '—' }}/10</span>
+                </div>
+                
+                <div v-if="selectedMovie.Ratings && selectedMovie.Ratings.length > 0" class="flex items-center gap-2">
+                  <span v-for="rating in selectedMovie.Ratings.slice(0, 2)" :key="rating.Source" class="text-xs bg-slate-800 px-2 py-1 rounded">
+                    {{ rating.Source }}: {{ rating.Value }}
+                  </span>
+                </div>
+              </div>
+              
+              <div class="space-y-3 text-sm">
+                <p><strong class="text-gray-300">Plot:</strong> {{ selectedMovie.Plot || "Plot not available." }}</p>
+                
+                <div class="grid grid-cols-2 gap-2">
+                  <p><strong class="text-gray-300">Genre:</strong> {{ selectedMovie.Genre || "N/A" }}</p>
+                  <p><strong class="text-gray-300">Released:</strong> {{ selectedMovie.Released || "N/A" }}</p>
+                  <p><strong class="text-gray-300">Director:</strong> {{ selectedMovie.Director || "N/A" }}</p>
+                  <p><strong class="text-gray-300">Writer:</strong> {{ selectedMovie.Writer || "N/A" }}</p>
+                  <p><strong class="text-gray-300">Actors:</strong> {{ selectedMovie.Actors || "N/A" }}</p>
+                  <p><strong class="text-gray-300">Language:</strong> {{ selectedMovie.Language || "N/A" }}</p>
+                  <p><strong class="text-gray-300">Country:</strong> {{ selectedMovie.Country || "N/A" }}</p>
+                  <p><strong class="text-gray-300">Awards:</strong> {{ selectedMovie.Awards || "N/A" }}</p>
+                </div>
+                
+                <div v-if="selectedMovie.Type === 'series'">
+                  <p><strong class="text-gray-300">Seasons:</strong> {{ selectedMovie.totalSeasons || "N/A" }}</p>
+                </div>
+              </div>
+              
+              <!-- Like and Comment Section -->
+              <div class="mt-6 border-t border-slate-700 pt-4">
+                <div class="flex items-center gap-4 mb-4">
+                  <button 
+                    @click="toggleLike(selectedMovie.imdbID)"
+                    class="flex items-center gap-1 text-gray-400 hover:text-pink-500 transition"
+                    :class="{ 'text-pink-500': isLiked(selectedMovie.imdbID) }"
+                  >
+                    <i class="fas" :class="isLiked(selectedMovie.imdbID) ? 'fa-heart' : 'fa-heart'"></i>
+                    <span>{{ getLikesCount(selectedMovie.imdbID) }}</span>
+                  </button>
+                  
+                  <button 
+                    @click="showComments = !showComments"
+                    class="flex items-center gap-1 text-gray-400 hover:text-blue-400 transition"
+                  >
+                    <i class="fas fa-comment"></i>
+                    <span>{{ getCommentsCount(selectedMovie.imdbID) }}</span>
+                  </button>
+                </div>
+                
+                <!-- Comment Input -->
+                <div v-if="showComments" class="mb-4">
+                  <textarea
+                    v-model="newComment"
+                    placeholder="Add your comment..."
+                    class="w-full bg-slate-800 rounded p-2 text-sm focus:outline-none focus:ring-1 focus:ring-pink-500"
+                    rows="2"
+                  ></textarea>
+                  <button
+                    @click="addComment(selectedMovie.imdbID)"
+                    class="mt-2 bg-pink-500 hover:bg-pink-600 px-3 py-1 rounded text-sm transition"
+                    :disabled="!newComment.trim()"
+                  >
+                    Post Comment
+                  </button>
+                </div>
+                
+                <!-- Comments List -->
+                <div v-if="showComments" class="comment-box bg-slate-800 rounded p-3">
+                  <div v-if="getComments(selectedMovie.imdbID).length === 0" class="text-center text-gray-500 py-4">
+                    No comments yet. Be the first to comment!
+                  </div>
+                  <div v-else class="space-y-3">
+                    <div v-for="(comment, index) in getComments(selectedMovie.imdbID)" :key="index" class="border-b border-slate-700 pb-3 last:border-0">
+                      <div class="flex justify-between items-start">
+                        <p class="font-medium">{{ comment.user || 'Anonymous' }}</p>
+                        <small class="text-gray-500">{{ formatDate(comment.timestamp) }}</small>
+                      </div>
+                      <p class="text-sm mt-1">{{ comment.text }}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="flex gap-3 mt-6">
+                <a
+                  :href="'https://www.imdb.com/title/' + selectedMovie.imdbID"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="inline-flex items-center gap-2 bg-pink-500 hover:bg-pink-600 px-4 py-2 rounded text-sm transition flex-grow justify-center"
+                >
+                  <i class="fab fa-imdb"></i> IMDb Page
+                </a>
+                <a
+                  :href="subtitleSearchUrl(selectedMovie.Title)"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded text-sm transition flex-grow justify-center"
+                >
+                  <i class="fas fa-closed-captioning"></i> Find Subtitles
+                </a>
+                <a
+                  v-if="selectedMovie.Type === 'movie'"
+                  :href="trailerSearchUrl(selectedMovie.Title + ' ' + selectedMovie.Year + ' trailer')"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 px-4 py-2 rounded text-sm transition flex-grow justify-center"
+                >
+                  <i class="fab fa-youtube"></i> Watch Trailer
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </transition>
+  </div>
+
+  <script>
+    const { createApp } = Vue;
+
+    createApp({
+      data() {
+        return {
+          searchQuery: "",
+          movies: [],
+          loading: false,
+          apiKey: "e6f7752f", // Replace with your OMDb API key
+          selectedMovie: null,
+          currentPage: 1,
+          totalResults: 0,
+          typeFilter: "",
+          yearFilter: "",
+          showWatchlist: false,
+          watchlist: JSON.parse(localStorage.getItem('watchlist')) || [],
+          years: Array.from({length: 50}, (_, i) => new Date().getFullYear() - i),
+          defaultPoster: 'https://via.placeholder.com/300x445?text=No+Image',
+          showComments: false,
+          newComment: "",
+          likes: JSON.parse(localStorage.getItem('likes')) || {},
+          comments: JSON.parse(localStorage.getItem('comments')) || {},
+          currentUser: "User" + Math.floor(Math.random() * 1000), // Random user for demo
+          searchTimeout: null
+        };
+      },
+      computed: {
+        displayItems() {
+          return this.showWatchlist ? this.watchlist : this.movies;
+        },
+        totalPages() {
+          return Math.ceil(this.totalResults / 10);
+        }
+      },
+      mounted() {
+        this.loadPopular();
+      },
+      methods: {
+        handleSearchInput() {
+          // Clear previous timeout
+          if (this.searchTimeout) {
+            clearTimeout(this.searchTimeout);
+          }
+          
+          // Set new timeout
+          this.searchTimeout = setTimeout(() => {
+            if (this.searchQuery.trim().length >= 3 || this.searchQuery.trim() === "") {
+              this.searchMovies();
+            }
+          }, 500); // 500ms delay
+        },
+        clearSearch() {
+          this.searchQuery = "";
+          this.loadPopular();
+        },
+        async loadPopular() {
+          const popularQueries = ["Avengers", "Batman", "Game of Thrones", "Marvel", "Friends"];
+          this.loading = true;
+          this.showWatchlist = false;
+          this.currentPage = 1;
+
+          try {
+            const allResults = await Promise.all(
+              popularQueries.map(async (term) => {
+                const res = await fetch(`https://www.omdbapi.com/?apikey=${this.apiKey}&s=${encodeURIComponent(term)}&page=1`);
+                const data = await res.json();
+                return data.Response === "True" ? data.Search : [];
+              })
+            );
+
+            const uniqueMoviesMap = new Map();
+            allResults.flat().forEach(movie => {
+              if (!uniqueMoviesMap.has(movie.imdbID)) uniqueMoviesMap.set(movie.imdbID, movie);
+            });
+            const uniqueMovies = Array.from(uniqueMoviesMap.values());
+
+            const detailed = await Promise.all(
+              uniqueMovies.map(async (m) => {
+                const res = await fetch(`https://www.omdbapi.com/?apikey=${this.apiKey}&i=${m.imdbID}&plot=short`);
+                return await res.json();
+              })
+            );
+
+            this.movies = detailed;
+            this.totalResults = this.movies.length;
+          } catch (error) {
+            console.error("Error loading popular movies:", error);
+          } finally {
+            this.loading = false;
+          }
+        },
+        async searchMovies() {
+          const term = this.searchQuery.trim();
+          if (!term) return this.loadPopular();
+          
+          this.loading = true;
+          this.selectedMovie = null;
+          this.currentPage = 1;
+          this.showWatchlist = false;
+
+          try {
+            let url = `https://www.omdbapi.com/?apikey=${this.apiKey}&s=${encodeURIComponent(term)}&page=${this.currentPage}`;
+            if (this.typeFilter) url += `&type=${this.typeFilter}`;
+            if (this.yearFilter) url += `&y=${this.yearFilter}`;
+            
+            const res = await fetch(url);
+            const data = await res.json();
+            
+            if (data.Response === "True") {
+              this.totalResults = parseInt(data.totalResults);
+              
+              const details = await Promise.all(
+                data.Search.map(async (m) => {
+                  const detailRes = await fetch(`https://www.omdbapi.com/?apikey=${this.apiKey}&i=${m.imdbID}&plot=short`);
+                  return await detailRes.json();
+                })
+              );
+              
+              this.movies = details;
+            } else {
+              this.movies = [];
+              this.totalResults = 0;
+            }
+          } catch (error) {
+            console.error("Error searching movies:", error);
+            this.movies = [];
+            this.totalResults = 0;
+          } finally {
+            this.loading = false;
+          }
+        },
+        async openModal(imdbID) {
+          if (!imdbID) return;
+          this.loading = true;
+          this.showComments = false;
+          
+          try {
+            const res = await fetch(`https://www.omdbapi.com/?apikey=${this.apiKey}&i=${imdbID}&plot=full`);
+            const data = await res.json();
+            
+            if (data.Response === "True") {
+              this.selectedMovie = data;
+            } else {
+              this.selectedMovie = null;
+            }
+          } catch (error) {
+            console.error("Error fetching movie details:", error);
+            this.selectedMovie = null;
+          } finally {
+            this.loading = false;
+          }
+        },
+        closeModal() {
+          this.selectedMovie = null;
+          this.showComments = false;
+          this.newComment = "";
+        },
+        async nextPage() {
+          if (this.currentPage >= this.totalPages) return;
+          this.currentPage++;
+          await this.loadPage(this.currentPage);
+        },
+        async prevPage() {
+          if (this.currentPage <= 1) return;
+          this.currentPage--;
+          await this.loadPage(this.currentPage);
+        },
+        async loadPage(page) {
+          const term = this.searchQuery.trim();
+          if (!term) return;
+          
+          this.loading = true;
+          
+          try {
+            let url = `https://www.omdbapi.com/?apikey=${this.apiKey}&s=${encodeURIComponent(term)}&page=${page}`;
+            if (this.typeFilter) url += `&type=${this.typeFilter}`;
+            if (this.yearFilter) url += `&y=${this.yearFilter}`;
+            
+            const res = await fetch(url);
+            const data = await res.json();
+            
+            if (data.Response === "True") {
+              const details = await Promise.all(
+                data.Search.map(async (m) => {
+                  const detailRes = await fetch(`https://www.omdbapi.com/?apikey=${this.apiKey}&i=${m.imdbID}&plot=short`);
+                  return await detailRes.json();
+                })
+              );
+              
+              this.movies = details;
+            }
+          } catch (error) {
+            console.error("Error loading page:", error);
+          } finally {
+            this.loading = false;
+          }
+        },
+        toggleWatchlist() {
+          this.showWatchlist = !this.showWatchlist;
+          if (!this.showWatchlist) {
+            this.searchMovies();
+          }
+        },
+        toggleWatchlistItem(movie) {
+          const index = this.watchlist.findIndex(m => m.imdbID === movie.imdbID);
+          
+          if (index === -1) {
+            this.watchlist.push(movie);
+          } else {
+            this.watchlist.splice(index, 1);
+          }
+          
+          localStorage.setItem('watchlist', JSON.stringify(this.watchlist));
+        },
+        isInWatchlist(imdbID) {
+          return this.watchlist.some(movie => movie.imdbID === imdbID);
+        },
+        handleImageError(event) {
+          event.target.src = this.defaultPoster;
+        },
+        subtitleSearchUrl(title) {
+          return `https://www.opensubtitles.org/en/search2/sublanguageid-eng/moviename-${encodeURIComponent(title)}`;
+        },
+        trailerSearchUrl(query) {
+          return `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
+        },
+        // Like functionality
+        toggleLike(imdbID) {
+          if (!this.likes[imdbID]) {
+            this.likes[imdbID] = [];
+          }
+          
+          const userIndex = this.likes[imdbID].indexOf(this.currentUser);
+          
+          if (userIndex === -1) {
+            this.likes[imdbID].push(this.currentUser);
+          } else {
+            this.likes[imdbID].splice(userIndex, 1);
+          }
+          
+          localStorage.setItem('likes', JSON.stringify(this.likes));
+        },
+        isLiked(imdbID) {
+          return this.likes[imdbID] && this.likes[imdbID].includes(this.currentUser);
+        },
+        getLikesCount(imdbID) {
+          return this.likes[imdbID] ? this.likes[imdbID].length : 0;
+        },
+        // Comment functionality
+        addComment(imdbID) {
+          if (!this.newComment.trim()) return;
+          
+          if (!this.comments[imdbID]) {
+            this.comments[imdbID] = [];
+          }
+          
+          this.comments[imdbID].push({
+            user: this.currentUser,
+            text: this.newComment.trim(),
+            timestamp: new Date().getTime()
+          });
+          
+          localStorage.setItem('comments', JSON.stringify(this.comments));
+          this.newComment = "";
+        },
+        getComments(imdbID) {
+          return this.comments[imdbID] || [];
+        },
+        getCommentsCount(imdbID) {
+          return this.comments[imdbID] ? this.comments[imdbID].length : 0;
+        },
+        formatDate(timestamp) {
+          const date = new Date(timestamp);
+          return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+        }
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>
